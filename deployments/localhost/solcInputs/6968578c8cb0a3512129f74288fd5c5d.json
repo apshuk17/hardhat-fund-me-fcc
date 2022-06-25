@@ -1,0 +1,42 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "contracts/FundMe.sol": {
+      "content": "// Get funds from users\n// Withdraw funds\n// Set a minimum funding value in USD\n\n// SPDX-License-Identifier: MIT\npragma solidity ^0.8.8;\n\nimport \"@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol\";\n\nimport \"./PriceConsumerV3.sol\";\n\nerror FundMe__NotOwner();\n\n/** @title A contract for crowd funding\n * @author Apoorva Shukla\n * @notice This contract is to demo a sample funding contract\n * @dev This implements chainlink price feed as our library\n */\ncontract FundMe {\n    // State variables\n    uint256 public constant MINIMUM_USD = 50 * 1e18;\n    PriceConsumerV3 private s_priceConsumer;\n    address private immutable i_owner;\n\n    address[] private s_funders;\n    mapping(address => uint256) private s_addressToAmountFunded;\n\n    // Modifiers\n    modifier onlyOwner() {\n        // require(msg.sender == getOwner(), \"Sender is not the owner!\");\n        if (msg.sender != getOwner()) {\n            revert FundMe__NotOwner();\n        }\n        _;\n    }\n\n    // Functions Order\n    /**\n     * constructor\n     * receive\n     * fallback\n     * external\n     * public\n     * internal\n     * private\n     * view/pure\n     */\n    constructor(address _priceFeedAddress) {\n        s_priceConsumer = new PriceConsumerV3(_priceFeedAddress);\n        i_owner = msg.sender;\n    }\n\n    receive() external payable {\n        fund();\n    }\n\n    fallback() external payable {\n        fund();\n    }\n\n    /**\n     * @notice This function is to transfer the contract balance to the owner\n     * @dev This function uses call to transfer contract balance\n     */\n    function withdraw() external onlyOwner {\n        // set the amount to zero of s_addressToAmountFunded addresses\n        for (uint256 i = 0; i < s_funders.length; i += 1) {\n            address funder = s_funders[i];\n            s_addressToAmountFunded[funder] = 0;\n        }\n\n        // Reset the s_funders array\n        s_funders = new address[](0);\n\n        // Transfer the balance to message sender\n        (bool callSuccess, ) = payable(msg.sender).call{\n            value: address(this).balance\n        }(\"\");\n        require(callSuccess, \"Call failed\");\n    }\n\n    function cheaperWithdraw() external onlyOwner {\n        address[] memory funders = s_funders;\n        // mappings can't be in memory\n        for (uint256 i = 0; i < funders.length; i += 1) {\n            address funder = funders[i];\n            s_addressToAmountFunded[funder] = 0;\n        }\n\n        // Reset the s_funders array\n        s_funders = new address[](0);\n\n        // Transfer the balance to owner\n        (bool callSuccess, ) = payable(i_owner).call{\n            value: address(this).balance\n        }(\"\");\n        require(callSuccess, \"Call failed\");\n    }\n\n    function getContractBalance() public view returns (uint256) {\n        return address(this).balance;\n    }\n\n    function getOwner() public view returns (address) {\n        return i_owner;\n    }\n\n    function getFunders(uint256 index) public view returns (address) {\n        return s_funders[index];\n    }\n\n    function getAddressToAmountFunded(address funder) public view returns (uint256) {\n        return s_addressToAmountFunded[funder];\n    }\n\n    function getPriceFeed() public view returns (AggregatorV3Interface) {\n        return s_priceConsumer.getPriceFeed();\n    }\n\n    function fund() public payable {\n        require(\n            s_priceConsumer.getConversionRate(msg.value) >= MINIMUM_USD,\n            \"Didn't send enough money\"\n        );\n        s_funders.push(msg.sender);\n        s_addressToAmountFunded[msg.sender] += msg.value;\n    }\n}\n"
+    },
+    "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ninterface AggregatorV3Interface {\n  function decimals() external view returns (uint8);\n\n  function description() external view returns (string memory);\n\n  function version() external view returns (uint256);\n\n  // getRoundData and latestRoundData should both raise \"No data present\"\n  // if they do not have data to report, instead of returning unset values\n  // which could be misinterpreted as actual reported values.\n  function getRoundData(uint80 _roundId)\n    external\n    view\n    returns (\n      uint80 roundId,\n      int256 answer,\n      uint256 startedAt,\n      uint256 updatedAt,\n      uint80 answeredInRound\n    );\n\n  function latestRoundData()\n    external\n    view\n    returns (\n      uint80 roundId,\n      int256 answer,\n      uint256 startedAt,\n      uint256 updatedAt,\n      uint80 answeredInRound\n    );\n}\n"
+    },
+    "contracts/PriceConsumerV3.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.8;\n\nimport \"@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol\";\nimport \"./PriceConverter.sol\";\n\ncontract PriceConsumerV3 {\n    // Type declarations\n    using PriceConverter for AggregatorV3Interface;\n\n    AggregatorV3Interface private s_priceFeed;\n\n    constructor(address _priceFeedAddress) {\n        s_priceFeed = AggregatorV3Interface(_priceFeedAddress);\n    }\n\n    function getPriceFeed() public view returns (AggregatorV3Interface) {\n        return s_priceFeed;\n    }\n\n    function getLatestPrice() public view returns (uint256) {\n        return getPriceFeed().getLatestPrice();\n    }\n\n    function getVersion() public view returns (uint256) {\n        return getPriceFeed().getVersion();\n    }\n\n    function getConversionRate(uint256 ethAmount) public view returns (uint256) {\n        return getPriceFeed().getConversionRate(ethAmount);\n    }\n}"
+    },
+    "contracts/PriceConverter.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.8;\n\nimport \"@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol\";\n\nlibrary PriceConverter {\n    function getDecimals(AggregatorV3Interface priceFeed) internal view returns (uint256) {\n        return priceFeed.decimals();\n    }\n\n    function getLatestPrice(AggregatorV3Interface priceFeed) internal view returns (uint256) {\n        uint256 decimalsLeft = uint256(18) - getDecimals(priceFeed);\n        (,int price,,,) = priceFeed.latestRoundData();\n        return uint256(price) * 10 ** decimalsLeft;\n    }\n\n    function getVersion(AggregatorV3Interface priceFeed) internal view returns (uint256) {\n        return priceFeed.version();\n    }\n\n    function getConversionRate(AggregatorV3Interface priceFeed, uint256 ethAmount) internal view returns (uint256) {\n        uint256 ethPriceInUSD = getLatestPrice(priceFeed);\n        uint256 ethAmountInUSD = (ethAmount * ethPriceInUSD) / 1e18;\n        return ethAmountInUSD;\n    }\n}"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": ["ast"]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}

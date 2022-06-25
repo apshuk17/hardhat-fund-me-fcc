@@ -28,14 +28,24 @@ module.exports = {
   },
   defaultNetwork: "hardhat",
   networks: {
-    ropsten: {
-      url: process.env.ROPSTEN_URL || "",
+    rinkeby: {
+      url:
+        process.env.RINKEBY_RPC_URL !== undefined
+          ? process.env.RINKEBY_RPC_URL?.toString().trim()
+          : "",
       accounts:
-        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+        process.env.RINKEBY_PRIVATE_KEY !== undefined
+          ? [process.env.RINKEBY_PRIVATE_KEY]
+          : [],
+      chainId: 4,
+      blockConfirmations: 3,
     },
   },
   gasReporter: {
-    enabled: process.env.REPORT_GAS !== undefined,
+    enabled:
+      process.env.REPORT_GAS !== undefined ? process.env.REPORT_GAS : false,
+    outputFile: "gas-report.txt",
+    noColors: true,
     currency: "USD",
   },
   etherscan: {

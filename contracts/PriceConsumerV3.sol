@@ -5,23 +5,32 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "./PriceConverter.sol";
 
 contract PriceConsumerV3 {
+    // Type declarations
     using PriceConverter for AggregatorV3Interface;
 
-    AggregatorV3Interface internal priceFeed;
+    AggregatorV3Interface private s_priceFeed;
 
     constructor(address _priceFeedAddress) {
-        priceFeed = AggregatorV3Interface(_priceFeedAddress);
+        s_priceFeed = AggregatorV3Interface(_priceFeedAddress);
+    }
+
+    function getPriceFeed() public view returns (AggregatorV3Interface) {
+        return s_priceFeed;
     }
 
     function getLatestPrice() public view returns (uint256) {
-        return priceFeed.getLatestPrice();
+        return getPriceFeed().getLatestPrice();
     }
 
     function getVersion() public view returns (uint256) {
-        return priceFeed.getVersion();
+        return getPriceFeed().getVersion();
     }
 
-    function getConversionRate(uint256 ethAmount) public view returns (uint256) {
-        return priceFeed.getConversionRate(ethAmount);
+    function getConversionRate(uint256 ethAmount)
+        public
+        view
+        returns (uint256)
+    {
+        return getPriceFeed().getConversionRate(ethAmount);
     }
 }
